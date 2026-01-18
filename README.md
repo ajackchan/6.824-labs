@@ -1,2 +1,2 @@
 # 6.824-labs
-MIT 6.824 Distributed Systems Labs
+MIT 6.824 Distributed Systems Labs 

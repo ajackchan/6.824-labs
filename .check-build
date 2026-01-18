@@ -2,7 +2,7 @@
 
 set -eu
 
-REFERENCE_FILES=(
+REFERENCE_FILES=( 
     # misc
     src/labgob/labgob.go
     src/labgob/test_test.go
