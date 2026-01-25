@@ -23,11 +23,21 @@ type KVServer struct {
 	mu sync.Mutex
 
 	// Your definitions here.
+	//存储 key -> (value, version)
+	data map[string]struct {
+		value string
+		version rpc.Tversion
+	}
 }
 
+// 初始化 Server
 func MakeKVServer() *KVServer {
 	kv := &KVServer{}
 	// Your code here.
+	kv.data = make(map[string]struct {
+		value string
+		version rpc.Tversion
+	})
 	return kv
 }
 
@@ -35,6 +45,21 @@ func MakeKVServer() *KVServer {
 // exists. Otherwise, Get returns ErrNoKey.
 func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 	// Your code here.
+	// 加锁确保线程安全
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	// 检查 key 是否存在
+	entry, exists := kv.data[args.Key]
+	if !exists {
+		reply.Err = rpc.ErrNoKey
+		return
+	}
+
+	// key 存在，返回对应的值和版本号
+	reply.Value = entry.value
+	reply.Version = entry.version
+	reply.Err = rpc.OK	// 表示操作成功
 }
 
 // Update the value for a key if args.Version matches the version of
@@ -43,6 +68,38 @@ func (kv *KVServer) Get(args *rpc.GetArgs, reply *rpc.GetReply) {
 // args.Version is 0, and returns ErrNoKey otherwise.
 func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 	// Your code here.
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	entry, exists := kv.data[args.Key]
+
+	if !exists {
+		if args.Version == 0 {
+			//创建新 key, version 从0 -> 1
+			kv.data[args.Key] = struct {
+				value string
+				version rpc.Tversion
+			}{value: args.Value, version: 1}
+			reply.Err = rpc.OK
+		}
+		else {
+			// version > 0 但 key不存在，返回 ErrNoKey
+			reply.Err = rpc.ErrNoKey
+		}
+	}
+	else {
+		if args.Version == entry.version {
+			//版本匹配,可以安全更新
+			entry.value = args.Value		// 更新值
+			entry.version++					// 版本号递增
+			kv.data[args.Key] = entry		// 写回 map
+			reply.Err = rpc.OK				// 更新成功
+		}
+		else {
+			//版本不匹配
+			reply.Err = rpc.ErrVersion
+		}
+	}
 }
 
 // You can ignore Kill() for this lab
