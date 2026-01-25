@@ -81,21 +81,18 @@ func (kv *KVServer) Put(args *rpc.PutArgs, reply *rpc.PutReply) {
 				version rpc.Tversion
 			}{value: args.Value, version: 1}
 			reply.Err = rpc.OK
-		}
-		else {
+		}else {
 			// version > 0 但 key不存在，返回 ErrNoKey
 			reply.Err = rpc.ErrNoKey
 		}
-	}
-	else {
+	}else {
 		if args.Version == entry.version {
 			//版本匹配,可以安全更新
 			entry.value = args.Value		// 更新值
 			entry.version++					// 版本号递增
 			kv.data[args.Key] = entry		// 写回 map
 			reply.Err = rpc.OK				// 更新成功
-		}
-		else {
+		}else {
 			//版本不匹配
 			reply.Err = rpc.ErrVersion
 		}

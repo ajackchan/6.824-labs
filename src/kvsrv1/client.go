@@ -30,7 +30,19 @@ func MakeClerk(clnt *tester.Clnt, server string) kvtest.IKVClerk {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
-	return "", 0, rpc.ErrNoKey
+	// 准备 RPC 调用参数
+	args := rpc.GetArgs{Key: key}
+	reply := rpc.GetReply{}
+
+	// 发起 RPC 调用到服务器的 Get 方法
+	ok := ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
+
+	if !ok {
+		// 可靠网络下不应该发生
+		return "", 0, rpc.ErrNoKey
+	}
+
+	return reply.Value, reply.Version, reply.Err
 }
 
 // Put updates key with value only if the version in the
@@ -52,5 +64,20 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
-	return rpc.ErrNoKey
+	//准备 RPC 调用参数
+	args := rpc.PutArgs {
+		Key: key,
+		Value: value,
+		Version: version,
+	}
+	reply := rpc.PutReply{}
+
+	//发起 RPC 调用到服务器的 Put 方法
+	ok := ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+
+	if !ok {
+		return rpc.ErrNoKey
+	}
+
+	return reply.Err
 }
