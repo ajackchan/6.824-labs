@@ -1,6 +1,8 @@
 package kvsrv
 
 import (
+	"time"
+
 	"6.5840/kvsrv1/rpc"
 	"6.5840/kvtest1"
 	"6.5840/tester1"
@@ -28,21 +30,41 @@ func MakeClerk(clnt *tester.Clnt, server string) kvtest.IKVClerk {
 // The types of args and reply (including whether they are pointers)
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
+// 可靠网络下的 Get 方法
+// func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
+// 	// You will have to modify this function.
+// 	// 准备 RPC 调用参数
+// 	args := rpc.GetArgs{Key: key}
+// 	reply := rpc.GetReply{}
+
+// 	// 发起 RPC 调用到服务器的 Get 方法
+// 	ok := ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
+
+// 	if !ok {
+// 		// 可靠网络下不应该发生
+// 		return "", 0, rpc.ErrNoKey
+// 	}
+
+// 	return reply.Value, reply.Version, reply.Err
+// }
+
+// 不可靠网络下的 Get 方法
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
 	// 准备 RPC 调用参数
 	args := rpc.GetArgs{Key: key}
 	reply := rpc.GetReply{}
 
-	// 发起 RPC 调用到服务器的 Get 方法
-	ok := ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
-
-	if !ok {
-		// 可靠网络下不应该发生
-		return "", 0, rpc.ErrNoKey
+	for {
+		ok := ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
+		if ok {
+			// 收到回复， 返回结果
+			return reply.Value, reply.Version, reply.Err
+		} else {
+			//没有收到回复，等待后重试
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
-
-	return reply.Value, reply.Version, reply.Err
 }
 
 // Put updates key with value only if the version in the
@@ -62,6 +84,28 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 // The types of args and reply (including whether they are pointers)
 // must match the declared types of the RPC handler function's
 // arguments. Additionally, reply must be passed as a pointer.
+// 可靠网络下的 Put 方法
+// func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
+// 	// You will have to modify this function.
+// 	//准备 RPC 调用参数
+// 	args := rpc.PutArgs {
+// 		Key: key,
+// 		Value: value,
+// 		Version: version,
+// 	}
+// 	reply := rpc.PutReply{}
+
+// 	//发起 RPC 调用到服务器的 Put 方法
+// 	ok := ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+
+// 	if !ok {
+// 		return rpc.ErrNoKey
+// 	}
+
+// 	return reply.Err
+// }
+
+// 不可靠网络下的 Put 方法（添加重试和 ErrMaybe 处理）
 func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
 	//准备 RPC 调用参数
@@ -72,12 +116,30 @@ func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
 	}
 	reply := rpc.PutReply{}
 
-	//发起 RPC 调用到服务器的 Put 方法
-	ok := ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+	isFirstAttempt := true
 
-	if !ok {
-		return rpc.ErrNoKey
+	for {
+		ok := ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+		if ok {
+			// 收到回复
+			if reply.Err == rpc.ErrVersion {
+				//收到 ErrVersion
+				if isFirstAttempt {
+					// 第一次请求就收到 ErrAttempt，说明 Put 一定没有执行
+					return rpc.ErrVersion
+				} else {
+					//重试后收到 ErrVersion，可能是第一次执行了但回复丢失
+					// 返回 ErrMaybe
+					return rpc.ErrMaybe
+				}
+			}
+			// 其他错误或成功，直接返回
+			return reply.Err
+		} else {
+			// 没有收到回复，标记为不是第一次尝试
+			isFirstAttempt = false
+			// 等待后重试
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
-
-	return reply.Err
 }
