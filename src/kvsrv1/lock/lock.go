@@ -33,6 +33,41 @@ func MakeLock(ck kvtest.IKVClerk, l string) *Lock {
 	return lk
 }
 
+// 可靠网络下的 Acquire
+// func (lk *Lock) Acquire() {
+// 	// Your code here
+// 	for {	// 无限循环，直到成功获取锁
+// 		// 1.获取当前锁状态
+// 		value, version, err := lk.ck.Get(lk.lockKey)
+
+// 		if err == rpc.ErrNoKey {
+// 			// key 不存在。尝试获取锁（创建 key，version=0）
+// 			err := lk.ck.Put(lk.lockKey, lk.clientID, 0)
+// 			if err == rpc.OK {
+// 				// 成功获取锁
+// 				return 
+// 			}
+// 			// 可能是并发竞争，继续重试
+// 		} else if err == rpc.OK {
+// 			// key 存在
+// 			if value == "" {
+// 				// 锁空闲（空字符串表示未加锁）,尝试获取
+// 				err := lk.ck.Put(lk.lockKey, lk.clientID, version)
+// 				if err == rpc.OK {
+// 					// 成功获取锁
+// 					return 
+// 				}
+// 				// 版本不匹配，可能是其他客户端获取了锁，继续重试
+// 			}
+// 			// 锁被其他客户端持有，等待
+// 		}
+
+// 		// 等待一段时间后重试
+// 		time.Sleep(10 * time.Millisecond)
+//  	}
+// }
+
+// 不可靠网络下的 Acquire
 func (lk *Lock) Acquire() {
 	// Your code here
 	for {	// 无限循环，直到成功获取锁
@@ -47,16 +82,32 @@ func (lk *Lock) Acquire() {
 				return 
 			}
 			// 可能是并发竞争，继续重试
+		} else if err == rpc.ErrMaybe {
+			// 可能已经执行了，检查一下
+			value, _, err := lk.ck.Get(lk.lockKey)
+			if err == rpc.OK && value == lk.clientID {
+				// 	确认已经获取到锁
+				return 
+			}
+			// 可能没有执行，继续重试
 		} else if err == rpc.OK {
 			// key 存在
 			if value == "" {
-				// 锁空闲（空字符串表示未加锁）,尝试获取
+				//锁空闲
 				err := lk.ck.Put(lk.lockKey, lk.clientID, version)
 				if err == rpc.OK {
 					// 成功获取锁
 					return 
+				} else if err == rpc.ErrMaybe {
+					// 可能已经执行了，检查一下
+					value, _, err := lk.ck.Get(lk.lockKey)
+					if err == rpc.OK && value == lk.clientID {
+						// 确认已经获取到锁
+						return 
+					}
+					// 可能没有执行，继续重试
 				}
-				// 版本不匹配，可能是其他客户端获取了锁，继续重试
+				// ErrVersion 或其他错误，继续重试
 			}
 			// 锁被其他客户端持有，等待
 		}
@@ -66,6 +117,38 @@ func (lk *Lock) Acquire() {
  	}
 }
 
+// 可靠网络下的 Release
+// func (lk *Lock) Release() {
+// 	// Your code here
+// 	for {
+// 		// 获取当前锁状态
+// 		value, version, err := lk.ck.Get(lk.lockKey)
+
+// 		if err == rpc.ErrNoKey {
+// 			// key 不存在，说明锁已经被释放
+// 			return 
+// 		}
+
+// 		if err == rpc.OK {
+// 			if value == lk.clientID {
+// 				// 确认锁由当前客户端持有，释放锁（设置为空字符串）
+// 				err := lk.ck.Put(lk.lockKey, "", version)
+// 				if err == rpc.OK {
+// 					// 成功释放
+// 					return 
+// 				}
+// 				// 版本不匹配，可能锁状态已改变，继续重试
+// 			} else {
+// 				// 锁不是由当前客户端持有，不应该释放
+// 				return 
+// 			}
+// 		}
+
+// 		time.Sleep(10 * time.Millisecond)
+// 	}
+// }
+
+// 不可靠网络下的 Release
 func (lk *Lock) Release() {
 	// Your code here
 	for {
